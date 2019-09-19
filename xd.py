@@ -88,12 +88,12 @@ from devmood.nn.learning.nn_learner import learn
 #       alls[target][context] = pair2count[f"{target} {context}"]
 # 
 # path = "/home/amillert/private/distributed-word-representations/data/tmp.npy"
-# matrix_np = np.array([list(alls[idx].values()) for idx in vocab_idx])
-# np.save(path, matrix_np)
-# matrix_np = np.load(path)
+# coocurance_matrix_np = np.array([list(alls[idx].values()) for idx in vocab_idx])
+# np.save(path, coocurance_matrix_np)
+# coocurance_matrix_np = np.load(path)
 # 
 # Preview of the matrix:
-# for i, x in enumerate(matrix_np):
+# for i, x in enumerate(coocurance_matrix_np):
 #   print(f"Values found for the word {idx2word[row2idx[i]]} are {' '.join(set([str(xi) for xi in x]))}")
 
 def vector_length(v):
@@ -133,6 +133,49 @@ triangle = np.array([[ 2.0,  4.0], [10.0, 15.0], [14.0, 10.0]])
 #   print(f"|BC| = {distance_metric(triangle[1], triangle[2])}")
 #   print(f"|AC| = {distance_metric(triangle[0], triangle[2])}", end="\n")
 
+# args = {"batch_size": 128, "dims": 100, "eta": 0.001, "window": 6, "epochs": 49, "input": "Pan Tadeusz"}
+# learn(args)
+
+tmp_path = os.path.join(os.getcwd(), "devmood/nn/results/weights")
+word_embeddings = [[pair[0], [float(vecval) for vecval in pair[1].split(" ")]] for row in [[row.split(",") for row in open(os.path.join(tmp_path, sorted(os.listdir(tmp_path))[-1]), encoding="utf-8").read().split("\n") if row != ""]] for pair in row]
+
+word2row = {word: idx for idx, word in enumerate([x[0] for x in word_embeddings])}
+row2word = {idx: word for word, idx in word2row.items()}
+
+word_embeddings = [np.array(row[1]) for row in word_embeddings]
+
+def distances(word, matrix, word2row, row2word, metric=euclidean_distance):
+  word_distances = {}
+  for i, row in enumerate(matrix):
+    distance = metric(matrix[word2row[word]], row)
+    word_distances[row2word[i]] = distance
+    # print(f"{' '.join(str(metric.__name__).capitalize().split('_'))} between {word} & {row2word[i]}: {distance}")
+
+def distances_matrix(matrix, metric=euclidean_distance):
+  distances = [[metric(rowi, rowj) for rowj in matrix] for rowi in matrix]
+  print(len(distances))
+  print(len(distances[0]))
+  print(len(distances[123]))
+  return distances
+  # for rowi in matrix:
+  #   matrix_row = []
+  #   for rowj in matrix:
+  #     matrix_row.append(metric(rowi, rowj))
+  #   distances.append(matrix_row)
+  # return distances
+
+
+# ksiadz_distances = distances("ksiądz", word_embeddings)
+
+# takes 15 mins
+distances_matrix = distances_matrix(word_embeddings)
+np_distances_matrix = np.array(distances_matrix)
+np.save(os.path.join(os.getcwd(), "data/matrix.npy"), np_distances_matrix)
+np_distances_matrix = np.load(os.path.join(os.getcwd(), "data/matrix.npy"))
+
+
+
+
 # def neighbours(word, matrix, rownames, distance=euclidean_distance):
 #   palabra = matrix[rownames.index(word)]
 #   distances = [(rownames[i], distance(palabra, matrix[i])) for i in xrange(len(mat))]
@@ -140,6 +183,4 @@ triangle = np.array([[ 2.0,  4.0], [10.0, 15.0], [14.0, 10.0]])
 #   # return sorted(distances, key=itemgetter(1), reverse=False)
 # 
 # neighbours("ksiądz", matrix_np, rownames=ww[1])
-args = {"batch_size": 128, "dims": 50, "eta": 0.01, "epochs": 100, "input": "Pan Tadeusz"}
-learn(args)
 
