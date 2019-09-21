@@ -1,186 +1,104 @@
-import re
 import os
-import copy
-import time
 import numpy as np
-from smart_open import smart_open as open
 from pprint import pprint
-from collections import Counter
 
-from torch.utils.data import Dataset
-
+import utils.preprocessing as preprocessing
+import utils.distances as metrics
 from devmood.nn.learning.nn_learner import learn
 
 
-# MAIN_DIR = os.getcwd()
-# ELLIPSIS = chr(8230)
-# QUOTE = chr(187)
-# MINUS = chr(8212)
-# text = open(os.path.join(MAIN_DIR, "data/pan-tadziu.txt"), encoding="utf-8").read().replace(ELLIPSIS, ".").replace(QUOTE, "").replace(MINUS, "")
-# pol_stop_words = open(os.path.join(os.getcwd(), "data/polish-stopwords.txt"), encoding="utf-8").read().split("\n")
-# 
-# REGEX_DOC_SPLIT = "(Księga)[a-z ąćęłóźż]*[\n]{4,}"
-# DOC_SPLITTER = "`~`"
-# docs = [' '.join(' '.join(x.split("\n\n")[1:]).split("    ")[1:]).replace("\n", " ") for x in re.sub(REGEX_DOC_SPLIT, DOC_SPLITTER, text).split(DOC_SPLITTER) if x != ""]
-# 
-# docs2sentences = [re.sub("[.!?]", ".", doc).strip().split(".") for doc in docs]
-# docs2sentences = [[re.sub("[,;:*(){}\-\/]", "", sentence.strip()) for sentence in doc if sentence != ""] for doc in docs2sentences]
-# docs2sentences2tokens = [[[word.lower() for word in sentence.split() if word.lower() not in pol_stop_words] for sentence in doc] for doc in docs2sentences]
-# 
-# fake = -1
-# window = 4
-# thresh = 1
-#  
-# def invert_dict(dic):
-#   return {v: k for k, v in dic.items()}
-# 
-# def get_all_stuff(docs2sentences2tokens):
-#   tokens = [word for doc in docs2sentences2tokens for sentence in doc for word in sentence]
-#   print(f"Amount of tokens: {len(tokens)}")
-#   vocab = sorted(list(set(tokens)))
-#   print(f"Vocab size: {len(vocab)}")
-#   word2idx = {word: idx for idx, word in enumerate(vocab)}
-#   idx2word = invert_dict(word2idx)
-#   
-#   all_tcp = []
-#   for doc in docs2sentences2tokens:
-#     for sentence in doc:
-#       for center_idx in range(len(sentence)):
-#         for context in range(-window // 2, window // 2 + 1):
-#           context_idx = center_idx + context
-#           if context_idx < 0 or context_idx >= len(sentence):
-#             all_tcp.append(tuple([center_idx, fake]))
-#           elif context_idx != center_idx:
-#             all_tcp.append(tuple([word2idx[sentence[center_idx]], word2idx[sentence[context_idx]]]))
-#   
-#   all_tcp_strings = [f"{pair[0]} {pair[1]}" for pair in all_tcp]
-#   print(f"Len of all tcps: {len(all_tcp)}")
-# 
-#   pair2count = Counter(all_tcp_strings)
-#   # pprint(sorted(pair2count.items(), key=lambda l: -l[1])[:10])
-# 
-#   tcp_strings_filtered = [tcp for tcp in all_tcp_strings if pair2count[tcp] > thresh]
-#   print(f"Len of tcp strings filtered: {len(tcp_strings_filtered)}")
-#   
-#   tcp_idx = [[int(x[0]), int(x[1])] for x in [pair.split(" ") for pair in tcp_strings_filtered]]
-#   print(f"Len of tcp idx filtered: {len(tcp_idx)}")
-#   vocab_idx = sorted(list(set([idx for x in tcp_idx for idx in x if idx != fake])))
-#   print(f"New vocab filtered size: {len(vocab_idx)}")
-#   word2idx = {idx2word[idx]: idx for idx in vocab_idx}
-# 
-#   return word2idx, tcp_idx, vocab_idx, pair2count
-# 
-# word2idx, tcp_idx, vocab_idx, pair2count = get_all_stuff(docs2sentences2tokens)
-# idx2word = invert_dict(word2idx)
-# 
-# inner = {word_idx: 0 for word_idx in vocab_idx}
-# alls = {word_idx: copy.deepcopy(inner) for word_idx in vocab_idx}
-# 
-# # TODO: make suer the keys are alway in good order; think about how to check if values are good (in pairs should have each other?)
-# # matrix_np = np.zeros((len(vocab_idx), len(vocab_idx)))
-# 
-# row2idx = {row: idx for idx, row in zip(vocab_idx, range(len(vocab_idx)))}
-# idx2row = invert_dict(row2idx)
-# 
-# for target, context in tcp_idx:
-#   if target != fake != context:
-#     if pair2count[f"{target} {context}"] > 0:
-#       alls[target][context] = pair2count[f"{target} {context}"]
-# 
-# path = "/home/amillert/private/distributed-word-representations/data/tmp.npy"
-# coocurance_matrix_np = np.array([list(alls[idx].values()) for idx in vocab_idx])
-# np.save(path, coocurance_matrix_np)
-# coocurance_matrix_np = np.load(path)
-# 
-# Preview of the matrix:
-# for i, x in enumerate(coocurance_matrix_np):
-#   print(f"Values found for the word {idx2word[row2idx[i]]} are {' '.join(set([str(xi) for xi in x]))}")
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# TESTING DISTANCE METRICS:               |
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def vector_length(v):
-  return np.sqrt(np.dot(v, v))
-
-def euclidean_distance(u, v):
-  return vector_length(u - v)
-
-def normalized_length(v):
-  return v / vector_length(v)
-
-def cosine_distance(u, v):
-  return 1.0 - (np.dot(u, v) / (vector_length(u) * vector_length(v)))
-
-def intersection(u, v):
-  return np.sum(np.minimum(u, v))
-
-def union(u, v):
-  return np.sum(np.maximum(u, v))
-
-def jaccard_distance(u, v):
-  return 1.0 - (intersection(u, v) / union(u, v))
-
-def jensen_shannon_distance(u, v):
-  return np.sum(u * np.log(u / v)) ** 2.0
-
-def dice_coefficient(u, v):
-  return 1.0 - (2.0 * np.sum(np.minimum(u, v)) / np.sum(u + v))
-
-triangle = np.array([[ 2.0,  4.0], [10.0, 15.0], [14.0, 10.0]])
-
-# think of counting the area of the triangles given those metrics
-# for distance_metric in (euclidean_distance, cosine_distance, jaccard_distance, jensen_shannon_distance, dice_coefficient):
-#   #format = {"name": distance_metric.__name__,  "AB": distance_metric(triangle[0], triangle[1]), "BC": distance_metric(triangle[1], triangle[2])}
+# triangle = np.array([[ 2.0,  4.0], [10.0, 15.0], [14.0, 10.0]])
+# for distance_metric in (metrics.euclidean_distance, metrics.cosine_distance, metrics.jaccard_distance, metrics.jensen_shannon_distance, metrics.dice_coefficient, metrics.soft_cosine_similarity):
 #   print(f"{distance_metric.__name__}")
 #   print(f"|AB| = {distance_metric(triangle[0], triangle[1])}")
 #   print(f"|BC| = {distance_metric(triangle[1], triangle[2])}")
 #   print(f"|AC| = {distance_metric(triangle[0], triangle[2])}", end="\n")
+# exit(12)
 
-# args = {"batch_size": 128, "dims": 100, "eta": 0.001, "window": 6, "epochs": 49, "input": "Pan Tadeusz"}
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# GETTING COOCURRENCE MATRIX:             |
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# text_splitted_to_docs = preprocessing.preprocess_pan_tadeusz()
+# docs2sentences2tokens = preprocessing.tokenize_docs_sentences(text_splitted_to_docs)
+# word2idx, tcp_idx, vocab_idx, pair2count = preprocessing.target_context_pairs_operations(docs2sentences2tokens)
+# idx2word = preprocessing.invert_dict(word2idx)
+# coocurrence_dict = preprocessing.get_word_coocurrence_dict(word2idx, tcp_idx, vocab_idx, pair2count)
+# coocurrence_matrix_np = preprocessing.get_coocurrence_matrix(vocab_idx, coocurrence_dict)
+# word2row = {idx2word[idx]: row for idx, row in zip(vocab_idx, range(len(vocab_idx)))}
+# row2word = preprocessing.invert_dict(word2row)
+# 
+# ksiadz_row = list(coocurrence_matrix_np[word2row["ksiądz"]])
+# print(set(ksiadz_row))
+# # KSIĄDZ WITH ROBAK - 9 COOCURRANCES:
+# print([row2word[row] for row, value in zip(range(len(ksiadz_row)), ksiadz_row) if value == 9])
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# PREVIEWING COOCURRENCE MATRIX:          |
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# preprocessing.preview_coocurance_matrix(coocurrence_matrix_np, row2word)
+# preprocessing.preview_coocurance_matrix(coocurrence_matrix_np, row2word, "ksiądz")
+# exit(12)
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# PyTorch SkipGram MODEL TRAINING:        |
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# args = {"batch_size": 128, "dims": 100, "eta": 0.001, "window": 5, "epochs": 50, "input": "Pan Tadeusz"}
 # learn(args)
+# exit(12)
 
-tmp_path = os.path.join(os.getcwd(), "devmood/nn/results/weights")
-word_embeddings = [[pair[0], [float(vecval) for vecval in pair[1].split(" ")]] for row in [[row.split(",") for row in open(os.path.join(tmp_path, sorted(os.listdir(tmp_path))[-1]), encoding="utf-8").read().split("\n") if row != ""]] for pair in row]
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# LOADING NEWEST PyTorch WORD EMBEDDINGS: |
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# weights_path = os.path.join(os.getcwd(), "devmood/nn/results/weights")
+# word_embeddings = [[pair[0], [float(vecval) for vecval in pair[1].split(" ")]] for row in [[row.split(",") for row in open(os.path.join(weights_path, sorted(os.listdir(weights_path))[-1]), encoding="utf-8").read().split("\n") if row != ""]] for pair in row]
+# print(word_embeddings[0])
+# exit(12)
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# LOADING GENSIM PRETRAINED EMBEDDINGS:   |
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+word_embeddings = [[pair[0], [float(vecval) for vecval in pair[1].split(" ")]] for row in [[row.split(",") for row in open(os.path.join(os.getcwd(), "devmood/nn/results/word-embedds-gensim-500d-500e-cbow.txt"), encoding="utf-8").read().split("\n") if row != ""]] for pair in row]
+# word_embeddings = [[pair[0], [float(vecval) for vecval in pair[1].split(" ")]] for row in [[row.split(",") for row in open(os.path.join(os.getcwd(), "devmood/nn/results/word-embedds-gensim-100d-50e-sg.txt"), encoding="utf-8").read().split("\n") if row != ""]] for pair in row]
+# print(word_embeddings[0])
+# exit(12)
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# GETTING DISTANCES MATRIX:               |
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 word2row = {word: idx for idx, word in enumerate([x[0] for x in word_embeddings])}
 row2word = {idx: word for word, idx in word2row.items()}
 
 word_embeddings = [np.array(row[1]) for row in word_embeddings]
-
-def distances(word, matrix, word2row, row2word, metric=euclidean_distance):
-  word_distances = {}
-  for i, row in enumerate(matrix):
-    distance = metric(matrix[word2row[word]], row)
-    word_distances[row2word[i]] = distance
-    # print(f"{' '.join(str(metric.__name__).capitalize().split('_'))} between {word} & {row2word[i]}: {distance}")
-
-def distances_matrix(matrix, metric=euclidean_distance):
-  distances = [[metric(rowi, rowj) for rowj in matrix] for rowi in matrix]
-  print(len(distances))
-  print(len(distances[0]))
-  print(len(distances[123]))
-  return distances
-  # for rowi in matrix:
-  #   matrix_row = []
-  #   for rowj in matrix:
-  #     matrix_row.append(metric(rowi, rowj))
-  #   distances.append(matrix_row)
-  # return distances
-
-
-# ksiadz_distances = distances("ksiądz", word_embeddings)
-
+ksiadz_distances = metrics.distances("ksiądz", word_embeddings, word2row, row2word, metrics.soft_cosine_similarity)
+# exit(32)
 # takes 15 mins
-distances_matrix = distances_matrix(word_embeddings)
+distances_matrix = metrics.distances_matrix(word_embeddings, metrics.soft_cosine_similarity)
 np_distances_matrix = np.array(distances_matrix)
-np.save(os.path.join(os.getcwd(), "data/matrix.npy"), np_distances_matrix)
-np_distances_matrix = np.load(os.path.join(os.getcwd(), "data/matrix.npy"))
+np.save(os.path.join(os.getcwd(), "data/gensim-matrix-cossim.npy"), np_distances_matrix)
+np_distances_matrix = np.load(os.path.join(os.getcwd(), "data/gensim-matrix-cossim.npy"))
 
+np_soft_cos_sim_matrix = np.array(metrics.distances_matrix(word_embeddings, metrics.soft_cosine_similarity))
+exit(12)
 
+word2find = "ksiądz"
+word_synonyms = metrics.top_most_similar_words(word2find, np_soft_cos_sim_matrix, 6)
+print(f"Top 12 most similar words to `{word2find}` are in order: {' '.join(word_synonyms)}")
 
+print(metrics.distances("ksiądz", metrics.np_soft_cos_sim_matrix, word2row, row2word, metrics.euclidean_distance)["bernardyn"])
 
-# def neighbours(word, matrix, rownames, distance=euclidean_distance):
-#   palabra = matrix[rownames.index(word)]
-#   distances = [(rownames[i], distance(palabra, matrix[i])) for i in xrange(len(mat))]
-#   return sorted(distances, key=lambda l: l[1])
-#   # return sorted(distances, key=itemgetter(1), reverse=False)
-# 
-# neighbours("ksiądz", matrix_np, rownames=ww[1])
+exit(12)
+
+top_word, top_list = metrics.find_word_with_the_closest_words_from_all(np_distances_matrix)
+print(f"Word with most similar words is {top_word} and the words are: {' '.join([str(x) for x in top_list])}")
+exit(76)
 

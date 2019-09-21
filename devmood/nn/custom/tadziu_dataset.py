@@ -33,7 +33,7 @@ class TadziuDataset(Dataset):
       self.FAKE = self.word2idx[FAKE_WORD]
       window = 6
 
-      # per sentence approach; gives SOME results xd
+      # per sentence approach
       # tcp = []
       # for doc in docs2sentences2tokens:
       #   for sentence in doc:
@@ -48,17 +48,7 @@ class TadziuDataset(Dataset):
       #           center_context_words.append(self.word2idx[sentence[context_idx]])
       #       tcp.append(tuple([self.word2idx[sentence[center_idx]], np.array(center_context_words)]))
 
-      # per document approach:
-      # docs2tokens = []
-      # for doc in docs2sentences2tokens:
-      #   tokens = []
-      #   for sentence in doc:
-      #     for word in sentence:
-      #       tokens.append(word)
-      #   docs2tokens.append(tokens)
-      # print(docs2tokens[4])
       docs2tokens = [[word for sentence in doc for word in sentence] for doc in docs2sentences2tokens]
-
       tcp = []
       for tokens in docs2tokens:
           for center_idx in range(len(tokens)):
