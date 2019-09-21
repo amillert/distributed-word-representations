@@ -1,5 +1,5 @@
 from devmood.nn.custom.tadziu_dataset import TadziuDataset
-from devmood.nn.models.word2vec import SkipGram
+from devmood.nn.models.word2vec import CBOW
 
 import os
 import json
@@ -20,7 +20,7 @@ def learn(args):
 
     criterion = nn.NLLLoss(ignore_index=FAKE)
 
-    model = SkipGram(vocab_size, args["dims"], FAKE)
+    model = CBOW(vocab_size, args["dims"], FAKE)
     optimizer = torch.optim.Adam(model.parameters(), lr=args["eta"])
 
     num_batches = len(dataset) // args["batch_size"]
